@@ -1,0 +1,73 @@
+<!DOCTYEP html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<style>
+body {
+	margin: 0;
+}
+#canvas_box {
+	position: relative;
+	overflow: hidden;
+	display: inline-block;
+}
+#labels_box {
+	
+}
+.label {
+	position: absolute;
+	font-family: Arial, Segoe UI Semibold, "Open Sans";
+	-moz-user-select: none;
+	user-select: none;
+	text-align: center;
+}
+.label-land {
+	color: #333;
+	text-shadow: 0 0 1px #fff;
+	font-weight: bold;
+	font-size: 14px;
+}
+.label-ocean {
+	color: #336abf;
+	font-size: 13px;
+}
+
+.controls {
+	position: absolute;
+	right: 10px;
+	bottom: 10px;
+}
+.zoom {
+	display: inline-block;
+	width: 30px;
+	line-height: 30px;
+	border: 1px solid #222;
+	text-align: center;
+	font-weight: bold;
+	cursor: pointer;
+	background: #fff;
+	font-size: 30px;
+	-moz-user-select: none;
+	user-select: none;
+}
+</style>
+</head>
+<body>
+
+<div id="canvas_box">
+	<div id="labels_box"></div>
+	<canvas id="canvas"></canvas>
+</div>
+<div>
+	<button id="switch_btn" style="display:none">Switch mode</button>
+</div>
+<div class="controls">
+	<span class="zoom" id="zoom_in">+</span>
+	<span class="zoom" id="zoom_out">-</span>
+</div>
+
+<script src="./earth.js"></script>
+
+</body>
+</html>
