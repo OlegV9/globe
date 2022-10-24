@@ -15,11 +15,12 @@
 	
 	setCanvasSize();
 	
-	let finalRadius = Math.min(cW, cH) / 2 * 0.8;
-	let minRadius = 70;
-	let radius = finalRadius;
+	let zoom = 1;
+	let finalZoom = 1;
+	let radius;
+	let mercatorSize;
 	
-	let maxRotateY = 60;
+	let maxRotateY = 80;
 	let rotateX = -60;
 	let rotateY = -15;
 	
@@ -44,6 +45,9 @@
 	let accuracy = 5;
 	
 	let additRotate = 0;
+	
+	let tileData = {};
+	let fullTile;
 	
 	let data;
 	
@@ -93,12 +97,13 @@
 	
 	function toXY(lat, lng, i, j) {
 		if (!switchStart) {
-			if (mode === 'globe') return latLngToXY(lat, lng, i, j);
-			if (mode === 'flat') return latLngToFlatXY(lat, lng, i, j);
+			if (mode === 'globe') return toGlobeXY(lat, lng, i, j);
+			if (mode === 'flat') return toWebMercatorXY(lat, lng, i, j);
 		}
 		
-		let globe = latLngToXY(lat, lng, i, j);
-		let flat = latLngToFlatXY(lat, lng, i, j);
+		let globe = toGlobeXY(lat, lng, i, j);
+		let flat = toWebMercatorXY(lat, lng, i, j);
+		if (!flat) return;
 		
 		let distX = (globe.x - flat.x) * switchRatio;
 		let distY = (globe.y - flat.y) * switchRatio;
@@ -120,7 +125,7 @@
 		};
 	}
 	
-	function latLngToXY(lat, lng, i, j) {
+	function toGlobeXY(lat, lng, i, j) {
 		//TODO: fix
 		if (lng === 0) {
 			lng = 0.01;
@@ -168,32 +173,17 @@
 		};
 	}
 	
-	function latLngToFlatXY(lat, lng, i, j) {
-		let arc = radius * Math.PI / 2;
-		let pixelRatio = arc / 90;
+	function toWebMercatorXY(lat, lng, i, j) {
+		if (lat > 85 || lat < -85) return null;
 		
-		let degreeX = lng + rotateX;
-		let degreeY = lat + rotateY;
+		let degree = mercatorSize / 360;
 		
-		if (degreeX > 180) {
-			degreeX -= 360;
-		} else if (degreeX < -180) {
-			degreeX += 360;
-		}
-		
-		let distX = degreeX * pixelRatio;
-		let distY = degreeY * pixelRatio;
-		
-		let x = w / 2 + distX;
-		let y = h / 2 - distY;
-		
-		let back = (x > w || x < 0 || y > h || y < 0);
+		let x = (rotateX + lng) * degree;
+		let y = rotateY * degree + Math.log((1 + sin(lat)) / (1 - sin(lat))) * mercatorSize / Math.PI / 4;
 		
 		return {
 			x: x,
-			y: y,
-			z: 0,
-			back: back
+			y: y
 		};
 	}
 	
@@ -253,6 +243,7 @@
 		coords.forEach((point, i) => {
 			let [lat, lng] = point;
 			let flat = toXY(lat, lng);
+			if (!flat) return;
 			
 			if (i === 0) {
 				firstVisible = !flat.back;
@@ -321,14 +312,9 @@
 		mSpeedX = 0;
 		mSpeedY = 0;
 		
-		radius += (finalRadius - radius) / 5;
-		
-		accuracy = 5 - Math.ceil(radius / 200);
-		if (accuracy < 1) {
-			accuracy = 1;
-		} else if (accuracy > 4) {
-			accuracy = 4;
-		}
+		zoom += (finalZoom - zoom) / 5;
+		radius = 100 * Math.pow(2, zoom);
+		mercatorSize = radius * Math.PI * 2;
 		
 		left = cW / 2 - radius;
 		top = cH / 2 - radius;
@@ -347,10 +333,17 @@
 		
 		if (mode === 'globe' && switchRatio > 0.7) {
 			drawCircle();
+		} else {
+			drawBg();
 		}
 		
 		drawObjects();
-		drawGrid();
+		if (mode === 'globe') {
+			drawGrid();
+		} else {
+			drawTiles();
+			drawFragment();
+		}
 		drawTexts();
 		
 		if (redCoords) {
@@ -385,6 +378,11 @@
 		ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
 		ctx.fillStyle = '#8ab4f8';
 		ctx.fill();
+	}
+	
+	function drawBg() {
+		ctx.fillStyle = '#8ab4f8';
+		ctx.fillRect(0, 0, cW, cH);
 	}
 	
 	function onKeyDown(e) {
@@ -512,6 +510,120 @@
 		//drawMeridian(0);
 	}
 	
+	function getTileUrl(type, z, x, y, r) {
+		if (r == null) {
+			r = Math.floor(Math.random() * 4);
+		}
+		if (type === 'satellite') {
+			return 'https://khms' + r + '.google.com/kh/v=932?x=' + x + '&y=' + y + '&z=' + z;
+		}
+		return 'https://mt' + r + '.google.com/vt/lyrs=m&x=' + x + '&y=' + y + '&z=' + z + '&hl=en';
+	}
+	
+	function drawTiles() {
+		let d = tileData;
+		
+		getTilesIndexes().forEach(tile => {
+			let {x, y, z, cnt} = tile;
+			
+			if (z <= 3) return;
+			
+			if (!d[z]) {
+				d[z] = {};
+			}
+			if (!d[z][x]) {
+				d[z][x] = {};
+			}
+			if (!d[z][x][y]) {
+				d[z][x][y] = true;
+				
+				let url = getTileUrl('standard', z, x, y);
+				let img = new Image();
+				img.onload = function() {
+					this.loaded = true;
+				}
+				img.src = url;
+				d[z][x][y] = img;
+			} else if (d[z][x][y] instanceof Image && d[z][x][y].loaded) {
+				let img = d[z][x][y];
+				
+				let size = mercatorSize / cnt;
+				let tileX = centerX + x * size - cnt / 2 * size + rotateX * mercatorSize / 360;
+				let tileY = centerY + y * size - cnt / 2 * size - rotateY * mercatorSize / 360;
+				ctx.drawImage(img, tileX, tileY, size, size);
+			}
+		});
+	}
+	
+	function getTilesIndexes() {
+		let list = [];
+		
+		let z = Math.round(zoom - 0.1);
+		let cnt = Math.pow(2, z);
+		let fsz = mercatorSize / cnt;
+		
+		let degree = mercatorSize / 360;
+		
+		let left = (180 - rotateX) * degree - cW / 2;
+		let right = left + cW;
+		
+		let top = (180 + rotateY) * degree - cH / 2;
+		let bottom = top + cH;
+		
+		for (let x = 0; x < cnt; x++) {
+			for (let y = 0; y < cnt; y++) {
+				if (left > (x + 1) * fsz || right < x * fsz) continue;
+				if (top > (y + 1) * fsz || bottom < y * fsz) continue;
+				
+				list.push({
+					z: z,
+					x: x,
+					y: y,
+					cnt: cnt
+				});
+			}
+		}
+		
+		return list;
+	}
+	
+	function drawFragment(withAreas) {
+		if (!fullTile) {
+			fullTile = new Image();
+			fullTile.onload = function() {}
+			fullTile.src = getTileUrl('satellite', 0, 0, 0, 0);
+			return;
+		}
+		
+		let size = 100;
+		let offsetX = cW - size - 10;
+		let offsetY = 10;
+		
+		let w = cW / mercatorSize * size;
+		let h = cH / mercatorSize * size;
+		
+		let rectX = size / 2 - rotateX / 360 * size - w / 2;
+		let rectY = size / 2 + rotateY / 360 * size - h / 2;
+		
+		ctx.drawImage(fullTile, offsetX, offsetY, size, size);
+		
+		ctx.beginPath();
+		ctx.strokeStyle = 'red';
+		ctx.rect(offsetX + rectX, offsetY + rectY, w, h);
+		ctx.stroke();
+		
+		if (!withAreas) return;
+		
+		getTilesIndexes().forEach(t => {
+			let s = size / t.cnt;
+			
+			ctx.beginPath();
+			ctx.strokeStyle = 'yellow';
+			ctx.rect(offsetX + t.x * s, offsetY + t.y * s, s, s);
+			ctx.stroke();
+		});
+	}
+	
 	function renderObject(object, i) {
 		let polygons = getPolygons(object.coords);
 		
@@ -584,7 +696,7 @@
 			}
 			
 			let coords = toXY(label.coords[0], label.coords[1]);
-			if (coords.back) {
+			if (!coords || coords.back) {
 				label.node.style.visibility = 'hidden';
 				return;
 			}
@@ -601,14 +713,14 @@
 	}
 	
 	function doZoom(isIn) {
-		let ratio = 1.1;
+		let zoomInc = 0.5;
 		if (isIn) {
-			finalRadius *= ratio;
+			finalZoom += zoomInc;
 		} else {
-			finalRadius /= ratio;
+			finalZoom -= zoomInc;
 		}
-		if (finalRadius < minRadius) {
-			finalRadius = minRadius;
+		if (finalZoom < 1) {
+			finalZoom = 1;
 		}
 	}
 	
@@ -658,8 +770,6 @@
 		
 		mSpeedX = angleX;
 		mSpeedY = angleY;
-		
-		//***
 		
 		if (!e.ctrlKey) {
 			rotateX += angleX;
@@ -733,6 +843,9 @@
 		if (data.y) {
 			rotateY = parseFloat(data.y);
 		}
+		if (data.mode) {
+			mode = data.mode;
+		}
 	}
 	
 	function cos(angle) {
@@ -778,6 +891,14 @@
 			[-35, -0.1],
 			[-30, -20], [-25, -20], [-20, -20], [-15, -20], [-10, -20], [-5, -20], [0.1, -20]
 		];
+		
+		objects = [
+			{
+				type: 'desert',
+				coords: [[10, -10], [10, 10], [-10, 10], [-10, -10]]
+			}
+		];
+		//return;
 		
 		objects = [
 			{
