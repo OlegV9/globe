@@ -28,7 +28,7 @@
 	let easing = 0.01;
 	
 	let constantSpeed = true;
-	let inertionX = 0;//0.1;
+	let inertionX = 0.1;
 	let inertionY = 0;
 	
 	let mSpeedX = 0;
