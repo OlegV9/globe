@@ -41,6 +41,7 @@
 	let switchDuration = 250;
 	let switchStart;
 	let mode = 'globe';
+	let modeTransitionZoom = [2.9, 4.4];
 	
 	let accuracy = 5;
 	
@@ -95,8 +96,52 @@
 	window.requestAnimationFrame(render);
 	//setInterval(draw, 10);
 	
+	function getGlobeRatio() {
+		let mz = modeTransitionZoom;
+		let globeRatio;
+		if (zoom < mz[0]) {
+			globeRatio = 1;
+		} else if (zoom > mz[1]) {
+			globeRatio = 0;
+		} else {
+			let range = mz[1] - mz[0];
+			globeRatio = 1 - (zoom - mz[0]) / range;
+		}
+		return globeRatio;
+	}
+	
 	function toXY(lat, lng, i, j) {
-		if (!switchStart) {
+		let globeRatio = getGlobeRatio();
+		
+		if (globeRatio === 1) return toGlobeXY(lat, lng, i, j);
+		if (globeRatio === 0) return toWebMercatorXY(lat, lng, i, j);
+		
+		let globe = toGlobeXY(lat, lng, i, j);
+		let flat = toWebMercatorXY(lat, lng, i, j);
+		if (!flat) return;
+		
+		let distX = (globe.x - flat.x) * globeRatio;
+		let distY = (globe.y - flat.y) * globeRatio;
+		
+		let x, y;
+		if (mode === 'globe') {
+			x = flat.x + distX;
+			y = flat.y + distY;
+		} else {
+			x = globe.x - distX;
+			y = globe.y - distY;
+		}
+		
+		return {
+			x,
+			y,
+			z: globe.z,
+			back: globe.back
+		};
+		
+		
+		
+		/*if (!switchStart) {
 			if (mode === 'globe') return toGlobeXY(lat, lng, i, j);
 			if (mode === 'flat') return toWebMercatorXY(lat, lng, i, j);
 		}
@@ -122,7 +167,7 @@
 			y,
 			z: globe.z,
 			back: flat.back
-		};
+		};*/
 	}
 	
 	function toGlobeXY(lat, lng, i, j) {
@@ -338,7 +383,8 @@
 		}
 		
 		drawObjects();
-		if (mode === 'globe') {
+		//if (mode === 'globe') {
+		if (zoom < modeTransitionZoom[1]) {
 			drawGrid();
 		} else {
 			drawTiles();
@@ -517,7 +563,10 @@
 		if (type === 'satellite') {
 			return 'https://khms' + r + '.google.com/kh/v=932?x=' + x + '&y=' + y + '&z=' + z;
 		}
-		return 'https://mt' + r + '.google.com/vt/lyrs=m&x=' + x + '&y=' + y + '&z=' + z + '&hl=en';
+		//return 'https://mt' + r + '.google.com/vt/lyrs=m&x=' + x + '&y=' + y + '&z=' + z + '&hl=en';
+		
+		let url = 'https://www.google.com/maps/vt/pb=!1m5!1m4!1i' + (z - 1) + '!2i' + x + '!3i' + y + '!4i128!2m2!1e0!3i624356444!3m7!2sen!3sua!5e1105!12m1!1e47!12m1!1e3!4e0!5m2!1e0!5f2!23i10203575!23i1381033!23i1368782!23i1368785!23i47025228!23i4592408!23i4640515!23i4819508!23i1375050!23i4536287';
+		return url;
 	}
 	
 	function drawTiles() {
@@ -558,7 +607,7 @@
 	function getTilesIndexes() {
 		let list = [];
 		
-		let z = Math.round(zoom - 0.1);
+		let z = Math.round(zoom - 0.1) + 1;
 		let cnt = Math.pow(2, z);
 		let fsz = mercatorSize / cnt;
 		
@@ -683,6 +732,7 @@
 		ctx.font = '20px serif';
 		ctx.fillText('X: ' + round(rotateX, 1), 5, 15);
 		ctx.fillText('Y: ' + round(rotateY, 1), 5, 35);
+		ctx.fillText('Z: ' + round(zoom, 1), 5, 55);
 		
 		labels.forEach(label => {
 			if (!label.node) {
