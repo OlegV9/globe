@@ -72,6 +72,8 @@
 	
 	document.querySelector('#switch_btn').addEventListener('click', switchMode);
 	
+	document.body.addEventListener('click', onClick);
+	
 	document.addEventListener('wheel', e => doZoom(e.deltaY < 0));
 	document.querySelector('#zoom_in').addEventListener('click', e => doZoom(true));
 	document.querySelector('#zoom_out').addEventListener('click', e => doZoom(false));
@@ -393,10 +395,20 @@
 		drawTexts();
 		
 		if (redCoords) {
-			let xy = toXY(redCoords[0], redCoords[1]);
-			if (xy) {
-				drawDot(left + radius + xy.x, top + radius - xy.y, 'red', 10);
-			}
+			drawCoords(redCoords[0], redCoords[1], 'red', 10);
+		}
+		
+		//kiev
+		//drawCoords(50.5, 30.5, 'blue', 10);
+	}
+	
+	function drawCoords(lat, lng, color, r) {
+		color = color || 'red';
+		r = r || 5;
+		
+		let xy = toXY(lat, lng);
+		if (xy && !xy.back) {
+			drawDot(left + radius + xy.x, top + radius - xy.y, color, r);
 		}
 	}
 	
@@ -492,6 +504,11 @@
 	}
 	
 	function drawMeridian(lng, color) {
+		//TODO: fix
+		if (lng === 0) {
+			lng += 0.01;
+		}
+		
 		color = color || '#678fd1';
 		
 		let rX = rotateX + lng;
@@ -876,6 +893,39 @@
 		mode = (mode === 'globe' ? 'flat' : 'globe');
 	}
 	
+	function toCoords(x, y) {
+		let r2 = radius * radius;
+		
+		let rY = Math.sqrt(r2 - x * x);
+		let angleY = Math.asin(y / rY) / radian;
+		let fullAngleY = angleY - rotateY;
+		
+		let newY = rY * sin(fullAngleY);
+		let lat = Math.asin(newY / radius) / radian;
+		
+		let rX = Math.sqrt(r2 - newY * newY);
+		let lng = Math.asin(x / rX) / radian;
+		
+		if (abs(fullAngleY) >= 90) {
+			lng = 180 - lng;
+		}
+		
+		lng -= rotateX;
+		
+		return { lat, lng };
+	}
+	
+	function onClick(e) {
+		if (!e.ctrlKey) return;
+		
+		let x = e.pageX - centerX;
+		let y = -(e.pageY - centerY);
+		
+		let coords = toCoords(x, y);
+		
+		redCoords = [coords.lat, coords.lng];
+	}
+	
 	function initRotate() {
 		if (!location.search) return;
 		let pairs = location.search.slice(1).split('&');
@@ -892,6 +942,12 @@
 		}
 		if (data.y) {
 			rotateY = parseFloat(data.y);
+		}
+		if (data.speedX) {
+			inertionX = parseFloat(data.speedX);
+		}
+		if (data.speedY) {
+			inertionY = parseFloat(data.speedY);
 		}
 		if (data.mode) {
 			mode = data.mode;
